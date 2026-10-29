@@ -25,8 +25,8 @@ RUN pip install --no-cache-dir --upgrade pip && \
 RUN pip install --no-cache-dir runpod && \
     pip install --no-cache-dir f5-tts --extra-index-url https://download.pytorch.org/whl/cu121
 
-# 3. Install MMS Bengali dependencies
-RUN pip install --no-cache-dir transformers scipy soundfile
+# 3. Install MMS Bengali & Kokoro dependencies
+RUN pip install --no-cache-dir transformers scipy soundfile kokoro misaki[en]
 
 COPY . /app
 

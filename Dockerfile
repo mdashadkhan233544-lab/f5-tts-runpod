@@ -14,40 +14,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# 1. Install specific CUDA PyTorch & Torchaudio wheels
+# 1. Install specific CUDA PyTorch & Torchaudio
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir \
     torch==2.4.0 \
     torchaudio==2.4.0 \
     --index-url https://download.pytorch.org/whl/cu121
 
-# 2. Install RunPod and F5-TTS with all official requirements (preventing torch overwrite)
+# 2. Install RunPod and F5-TTS with ALL required dependencies automatically
 RUN pip install --no-cache-dir runpod && \
-    pip install --no-cache-dir --no-deps f5-tts && \
-    pip install --no-cache-dir \
-    torchdiffeq \
-    transformers \
-    accelerate \
-    soundfile \
-    librosa \
-    jieba \
-    rjieba \
-    pypinyin \
-    anyascii \
-    vocos \
-    cached_path \
-    ema-pytorch \
-    wandb \
-    tomli \
-    hydra-core \
-    omegaconf \
-    matplotlib \
-    scipy \
-    tqdm \
-    pydub \
-    torchaudio-augmentations \
-    x-transformers \
-    click
+    pip install --no-cache-dir f5-tts --extra-index-url https://download.pytorch.org/whl/cu121
 
 COPY . /app
 

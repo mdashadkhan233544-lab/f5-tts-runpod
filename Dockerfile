@@ -19,7 +19,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
     torchaudio==2.4.0+cu121 \
     --extra-index-url https://download.pytorch.org/whl/cu121
 
-# Install f5-tts dependencies including hydra
+# Install f5-tts and all inference dependencies
 RUN pip install --no-cache-dir runpod && \
     pip install --no-cache-dir --no-deps f5-tts && \
     pip install --no-cache-dir \
@@ -35,7 +35,10 @@ RUN pip install --no-cache-dir runpod && \
     wandb \
     tomli \
     hydra-core \
-    omegaconf
+    omegaconf \
+    matplotlib \
+    scipy \
+    tqdm
 
 COPY . /app
 

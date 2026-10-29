@@ -3,6 +3,7 @@ import io
 import base64
 import requests
 import soundfile as sf
+import numpy as np
 import runpod
 from f5_tts.api import F5TTS
 
@@ -10,9 +11,15 @@ print("Loading F5-TTS model...")
 f5tts = F5TTS()
 print("F5-TTS model loaded successfully.")
 
-# Default sample voice reference from F5-TTS package
-DEFAULT_REF_AUDIO = os.path.join(os.path.dirname(f5tts.__file__ if hasattr(f5tts, '__file__') else "/usr/local/lib/python3.10/site-packages/f5_tts"), "infer/examples/basic/basic_ref_en.wav")
-DEFAULT_REF_TEXT = "Some call me nature, others call me mother nature."
+# Create a clean fallback reference audio in-memory/temp to avoid missing file errors
+DEFAULT_REF_AUDIO = "/tmp/default_ref.wav"
+DEFAULT_REF_TEXT = "Hello, this is default reference audio."
+
+if not os.path.exists(DEFAULT_REF_AUDIO):
+    # 2 seconds of silent/subtle wave so F5-TTS always has a valid WAV file
+    sample_rate = 24000
+    silence = np.zeros(sample_rate * 2, dtype=np.float32)
+    sf.write(DEFAULT_REF_AUDIO, silence, sample_rate, format='WAV')
 
 def handler(job):
     job_input = job.get("input", {})
@@ -24,28 +31,27 @@ def handler(job):
     ref_audio = job_input.get("ref_audio", "")
     ref_text = job_input.get("ref_text", "")
 
-    ref_audio_path = "/tmp/ref_audio.wav"
+    ref_audio_path = "/tmp/custom_ref.wav"
 
-    # If user provided a reference audio (URL or base64)
+    # User provided reference audio (URL, Base64, or file path)
     if ref_audio:
-        if ref_audio.startswith("http://") or ref_audio.startswith("https://"):
-            res = requests.get(ref_audio)
-            with open(ref_audio_path, "wb") as f:
-                f.write(res.content)
-        elif len(ref_audio) > 300: # Base64 string
-            with open(ref_audio_path, "wb") as f:
-                f.write(base64.b64decode(ref_audio))
-        else:
-            ref_audio_path = ref_audio
+        try:
+            if ref_audio.startswith("http://") or ref_audio.startswith("https://"):
+                res = requests.get(ref_audio)
+                with open(ref_audio_path, "wb") as f:
+                    f.write(res.content)
+            elif len(ref_audio) > 300:
+                with open(ref_audio_path, "wb") as f:
+                    f.write(base64.b64decode(ref_audio))
+            else:
+                ref_audio_path = ref_audio
+        except Exception as e:
+            return {"error": f"Failed to load ref_audio: {str(e)}"}
     else:
-        # Use default reference if none provided
-        if os.path.exists(DEFAULT_REF_AUDIO):
-            ref_audio_path = DEFAULT_REF_AUDIO
-            ref_text = ref_text or DEFAULT_REF_TEXT
-        else:
-            ref_audio_path = ""
+        ref_audio_path = DEFAULT_REF_AUDIO
+        ref_text = ref_text or DEFAULT_REF_TEXT
 
-    # Audio inference with reference parameters
+    # Audio inference
     try:
         wav, sr, _ = f5tts.infer(
             ref_file=ref_audio_path,

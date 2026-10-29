@@ -25,8 +25,8 @@ RUN pip install --no-cache-dir --upgrade pip && \
 RUN pip install --no-cache-dir runpod && \
     pip install --no-cache-dir f5-tts --extra-index-url https://download.pytorch.org/whl/cu121
 
-# 3. Install compatible Transformers for PyTorch 2.4 + Kokoro
-RUN pip install --no-cache-dir "transformers==4.46.3" scipy soundfile kokoro misaki[en]
+# 3. Install compatible Transformers, upgraded HuggingFace Hub & Kokoro
+RUN pip install --no-cache-dir "transformers==4.46.3" "huggingface_hub>=0.26.0" --upgrade datasets scipy soundfile kokoro misaki[en]
 
 COPY . /app
 

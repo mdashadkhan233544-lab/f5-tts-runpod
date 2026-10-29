@@ -24,4 +24,4 @@ jobs:
       with:
         context: .
         push: true
-        tags: ${{ secrets.DOCKERHUB_USERNAME }}/f5-tts-runpod:latest
+        tags: ${{ secrets.DOCKERHUB_USERNAME }}/ashadyt007/f5-tts-runpod:v1

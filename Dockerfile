@@ -19,7 +19,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
     torchaudio==2.4.0+cu121 \
     --extra-index-url https://download.pytorch.org/whl/cu121
 
-# Install f5-tts and runpod without letting pip overwrite the torch/torchaudio stack
+# Install f5-tts dependencies including hydra
 RUN pip install --no-cache-dir runpod && \
     pip install --no-cache-dir --no-deps f5-tts && \
     pip install --no-cache-dir \
@@ -33,7 +33,9 @@ RUN pip install --no-cache-dir runpod && \
     cached_path \
     ema-pytorch \
     wandb \
-    tomli
+    tomli \
+    hydra-core \
+    omegaconf
 
 COPY . /app
 

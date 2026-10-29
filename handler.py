@@ -4,31 +4,35 @@ import base64
 import requests
 import soundfile as sf
 import numpy as np
+
+# MUST import torch first before transformers
 import torch
+print(f"PyTorch loaded successfully. CUDA available: {torch.cuda.is_available()}")
+
 import runpod
 
-# 1. Load F5-TTS
-from f5_tts.api import F5TTS
-print("Loading F5-TTS...")
-f5tts = F5TTS()
-
-# 2. Load Meta MMS-TTS (Bengali)
+# 1. Load Meta MMS-TTS (Bengali)
 from transformers import VitsModel, AutoTokenizer
 print("Loading Meta MMS Bengali...")
 mms_tokenizer = AutoTokenizer.from_pretrained("facebook/mms-tts-ben")
 mms_model = VitsModel.from_pretrained("facebook/mms-tts-ben")
 
-# 3. Load Kokoro-TTS
+device = "cuda" if torch.cuda.is_available() else "cpu"
+mms_model.to(device)
+
+# 2. Load F5-TTS
+from f5_tts.api import F5TTS
+print("Loading F5-TTS...")
+f5tts = F5TTS()
+
+# 3. Load Kokoro-TTS (Safe initialization)
+kokoro_pipeline = None
 try:
     from kokoro import KPipeline
     print("Loading Kokoro-TTS Pipeline...")
-    kokoro_pipeline = KPipeline(lang_code='b') # Multilingual / Bengali support
+    kokoro_pipeline = KPipeline(lang_code='b')
 except Exception as e:
-    kokoro_pipeline = None
     print(f"Kokoro setup note: {e}")
-
-device = "cuda" if torch.cuda.is_available() else "cpu"
-mms_model.to(device)
 
 def handler(job):
     job_input = job.get("input", {})

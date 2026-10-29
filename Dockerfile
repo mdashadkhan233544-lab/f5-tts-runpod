@@ -5,27 +5,36 @@ ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
-# System dependencies
+# Install system dependencies (git, ffmpeg, build essentials)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     ffmpeg \
-    libsndfile1 \
+    build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# PyTorch & matching Torchaudio install
+# Force install matching torch and torchaudio versions for CUDA 12.1
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir \
-    torch==2.4.0 \
-    torchaudio==2.4.0 \
-    --index-url https://download.pytorch.org/whl/cu121
+    torch==2.4.0+cu121 \
+    torchaudio==2.4.0+cu121 \
+    --extra-index-url https://download.pytorch.org/whl/cu121
 
-# F5-TTS, RunPod & other dependencies
-RUN pip install --no-cache-dir \
-    f5-tts \
-    runpod \
-    soundfile
+# Install f5-tts and runpod without letting pip overwrite the torch/torchaudio stack
+RUN pip install --no-cache-dir runpod && \
+    pip install --no-cache-dir --no-deps f5-tts && \
+    pip install --no-cache-dir \
+    transformers \
+    accelerate \
+    soundfile \
+    librosa \
+    jieba \
+    pypinyin \
+    vocos \
+    cached_path \
+    ema-pytorch \
+    wandb \
+    tomli
 
-# Copy your handler file
-COPY handler.py /app/handler.py
+COPY . /app
 
-CMD ["python", "-u", "/app/handler.py"]
+CMD ["python", "-u", "handler.py"]

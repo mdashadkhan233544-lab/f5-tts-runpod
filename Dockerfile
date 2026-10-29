@@ -21,7 +21,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
     torchaudio==2.4.0 \
     --index-url https://download.pytorch.org/whl/cu121
 
-# Install runpod, f5-tts without replacing torch, along with all inference requirements
+# Install runpod, f5-tts without replacing torch, along with all dependencies
 RUN pip install --no-cache-dir runpod && \
     pip install --no-cache-dir --no-deps f5-tts && \
     pip install --no-cache-dir \
@@ -30,7 +30,9 @@ RUN pip install --no-cache-dir runpod && \
     soundfile \
     librosa \
     jieba \
+    rjieba \
     pypinyin \
+    anyascii \
     vocos \
     cached_path \
     ema-pytorch \
@@ -43,7 +45,8 @@ RUN pip install --no-cache-dir runpod && \
     tqdm \
     pydub \
     torchaudio-augmentations \
-    x-transformers
+    x-transformers \
+    click
 
 COPY . /app
 

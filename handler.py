@@ -7,16 +7,25 @@ import numpy as np
 import torch
 import runpod
 
-# Load F5-TTS
+# 1. Load F5-TTS
 from f5_tts.api import F5TTS
 print("Loading F5-TTS...")
 f5tts = F5TTS()
 
-# Load Meta MMS-TTS (Bengali)
+# 2. Load Meta MMS-TTS (Bengali)
 from transformers import VitsModel, AutoTokenizer
-print("Loading Meta MMS Bengali TTS...")
+print("Loading Meta MMS Bengali...")
 mms_tokenizer = AutoTokenizer.from_pretrained("facebook/mms-tts-ben")
 mms_model = VitsModel.from_pretrained("facebook/mms-tts-ben")
+
+# 3. Load Kokoro-TTS
+try:
+    from kokoro import KPipeline
+    print("Loading Kokoro-TTS Pipeline...")
+    kokoro_pipeline = KPipeline(lang_code='b') # Multilingual / Bengali support
+except Exception as e:
+    kokoro_pipeline = None
+    print(f"Kokoro setup note: {e}")
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 mms_model.to(device)
@@ -25,29 +34,28 @@ def handler(job):
     job_input = job.get("input", {})
     text = job_input.get("gen_text", "").strip()
     mode = job_input.get("engine_mode", "mms_bengali")
-    voice_type = job_input.get("mms_voice", "Default Clear")
+    sub_voice = job_input.get("sub_voice", "Default Clear")
     
     if not text:
         return {"error": "Missing 'gen_text'"}
 
-    # --- MODE 1: NATIVE BENGALI (Meta MMS) ---
+    # ================= 1. META MMS ENGINE =================
     if mode == "mms_bengali":
         try:
             inputs = mms_tokenizer(text, return_tensors="pt")
             inputs = {k: v.to(device) for k, v in inputs.items()}
             
-            # Voice style variation adjustments
             noise_scale = 0.667
             noise_scale_w = 0.8
             length_scale = 1.0
 
-            if voice_type == "Deep Story Male":
+            if sub_voice == "Deep Story Male":
                 noise_scale = 0.5
                 length_scale = 1.15
-            elif voice_type == "Radio News Fast":
+            elif sub_voice == "Radio News Fast":
                 noise_scale = 0.4
                 length_scale = 0.88
-            elif voice_type == "Soft Narration":
+            elif sub_voice == "Soft Narration":
                 noise_scale = 0.8
                 length_scale = 1.05
 
@@ -69,7 +77,29 @@ def handler(job):
         except Exception as e:
             return {"error": f"MMS Bengali Error: {str(e)}"}
 
-    # --- MODE 2: CUSTOM VOICE CLONE (F5-TTS) ---
+    # ================= 2. KOKORO-TTS ENGINE =================
+    elif mode == "kokoro_tts":
+        try:
+            if kokoro_pipeline is None:
+                return {"error": "Kokoro pipeline not initialized on server."}
+
+            generator = kokoro_pipeline(text, voice='bm_george', speed=1.0, split_pattern=r'\n+')
+            audio_segments = []
+            for _, _, audio in generator:
+                audio_segments.append(audio)
+
+            if not audio_segments:
+                return {"error": "Kokoro produced no audio output."}
+
+            final_wav = np.concatenate(audio_segments)
+            buffer = io.BytesIO()
+            sf.write(buffer, final_wav, 24000, format='WAV')
+            buffer.seek(0)
+            return {"status": "success", "audio_base64": base64.b64encode(buffer.read()).decode('utf-8')}
+        except Exception as e:
+            return {"error": f"Kokoro Error: {str(e)}"}
+
+    # ================= 3. F5-TTS CLONING ENGINE =================
     else:
         ref_audio = job_input.get("ref_audio", "")
         ref_text = job_input.get("ref_text", "")

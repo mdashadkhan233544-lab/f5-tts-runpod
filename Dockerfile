@@ -42,7 +42,8 @@ RUN pip install --no-cache-dir runpod && \
     scipy \
     tqdm \
     pydub \
-    torchaudio-augmentations
+    torchaudio-augmentations \
+    x-transformers
 
 COPY . /app
 

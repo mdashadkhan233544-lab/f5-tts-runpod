@@ -24,18 +24,40 @@ mms_model.to(device)
 def handler(job):
     job_input = job.get("input", {})
     text = job_input.get("gen_text", "").strip()
-    mode = job_input.get("engine_mode", "mms_bengali")  # 'mms_bengali' or 'f5_clone'
+    mode = job_input.get("engine_mode", "mms_bengali")
+    voice_type = job_input.get("mms_voice", "Default Clear")
     
     if not text:
         return {"error": "Missing 'gen_text'"}
 
-    # --- MODE 1: NATIVE BENGALI (Meta MMS) -> 100% CLEAR BANGLA ---
+    # --- MODE 1: NATIVE BENGALI (Meta MMS) ---
     if mode == "mms_bengali":
         try:
             inputs = mms_tokenizer(text, return_tensors="pt")
             inputs = {k: v.to(device) for k, v in inputs.items()}
+            
+            # Voice style variation adjustments
+            noise_scale = 0.667
+            noise_scale_w = 0.8
+            length_scale = 1.0
+
+            if voice_type == "Deep Story Male":
+                noise_scale = 0.5
+                length_scale = 1.15
+            elif voice_type == "Radio News Fast":
+                noise_scale = 0.4
+                length_scale = 0.88
+            elif voice_type == "Soft Narration":
+                noise_scale = 0.8
+                length_scale = 1.05
+
             with torch.no_grad():
-                output = mms_model(**inputs).waveform
+                output = mms_model(
+                    **inputs,
+                    noise_scale=noise_scale,
+                    noise_scale_w=noise_scale_w,
+                    length_scale=length_scale
+                ).waveform
             
             wav = output.squeeze().cpu().numpy()
             sr = mms_model.config.sampling_rate

@@ -5,19 +5,19 @@ ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
+# Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     ffmpeg \
     libsndfile1 \
     && rm -rf /var/lib/apt/lists/*
 
+# Install python dependencies ensuring compatible torchaudio
 RUN pip install --no-cache-dir \
     runpod \
+    torchaudio==2.4.0 \
     f5-tts \
-    soundfile \
-    torchaudio
-
-RUN python -c "from f5_tts.api import F5TTS; F5TTS(model_type='F5-TTS', device='cpu')"
+    soundfile
 
 COPY handler.py /app/handler.py
 

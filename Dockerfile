@@ -21,7 +21,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
     torchaudio==2.4.0 \
     --index-url https://download.pytorch.org/whl/cu121
 
-# Install f5-tts without replacing torch, along with all inference requirements
+# Install runpod, f5-tts without replacing torch, along with all inference requirements
 RUN pip install --no-cache-dir runpod && \
     pip install --no-cache-dir --no-deps f5-tts && \
     pip install --no-cache-dir \
@@ -40,7 +40,9 @@ RUN pip install --no-cache-dir runpod && \
     omegaconf \
     matplotlib \
     scipy \
-    tqdm
+    tqdm \
+    pydub \
+    torchaudio-augmentations
 
 COPY . /app
 

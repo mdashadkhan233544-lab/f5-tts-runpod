@@ -6,7 +6,7 @@ import soundfile as sf
 import base64
 import subprocess
 
-# প্রয়োজনীয় প্যাকেজ লোড
+# ১. মিসিং লাইব্রেরি ইনস্টলেশন
 try:
     import gdown
 except ImportError:
@@ -19,20 +19,14 @@ except ImportError:
     subprocess.check_call([sys.executable, "-m", "pip", "install", "transformers", "soundfile"])
     from transformers import VitsModel, AutoTokenizer
 
-try:
-    from rvc_python.infer import RVCInference
-except ImportError:
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "rvc-python"])
-    from rvc_python.infer import RVCInference
-
-# মডেল পাথ সেটআপ
+# ২. মডেল রাখার ডিরেক্টরি সেটআপ
 MODELS_DIR = "/app/models"
 os.makedirs(MODELS_DIR, exist_ok=True)
 
 PTH_PATH = os.path.join(MODELS_DIR, "asad_male.pth")
 INDEX_PATH = os.path.join(MODELS_DIR, "asad_male.index")
 
-# ১. গুগল ড্রাইভ থেকে মডেল ও ইনডেক্স ডাউনলোড
+# ৩. ড্রাইভ থেকে Asad মডেল অটো-ডাউনলোড
 def download_voice_models():
     if not os.path.exists(PTH_PATH) or os.path.getsize(PTH_PATH) == 0:
         print("Downloading asad_male.pth from Google Drive...")
@@ -44,7 +38,7 @@ def download_voice_models():
 
 download_voice_models()
 
-# ২. Meta MMS-TTS বাংলা মডেল লোড
+# ৪. Meta MMS-TTS লোড করা
 device = "cuda" if torch.cuda.is_available() else "cpu"
 print(f"Loading MMS-TTS model on {device}...")
 tts_model_name = "facebook/mms-tts-ben"
@@ -62,17 +56,25 @@ def generate_base_audio(text: str) -> str:
     return base_audio_path
 
 def convert_voice_with_rvc(input_audio_path: str) -> str:
-    """rvc-python সরাসরি চালিয়ে আসাদ কণ্ঠে রূপান্তর"""
+    """RVC ভয়েস কনভার্সন"""
     output_audio_path = "/tmp/final_output.wav"
+    
+    # rvc-python রানটাইম লোড
+    try:
+        from rvc_python.infer import RVCInference
+    except ImportError:
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "--no-build-isolation", "rvc-python"])
+        from rvc_python.infer import RVCInference
+
     try:
         rvc = RVCInference(device=device)
         rvc.load_model(PTH_PATH)
         rvc.infer_file(
             input_path=input_audio_path,
             output_path=output_audio_path,
-            index_path=INDEX_PATH,
-            f0_up_key=0,            # পুরুষ কণ্ঠের জন্য পিচ ০
-            f0_method="rmvpe",       # সবচেয়ে নিখুঁত ভয়েস পিচ ট্র্যাকার
+            index_path=INDEX_PATH if os.path.exists(INDEX_PATH) else None,
+            f0_up_key=0,
+            f0_method="rmvpe",
             index_rate=0.75,
             protect=0.33
         )
@@ -91,7 +93,7 @@ def handler(event):
     if not text:
         return {"error": "টেক্সট পাওয়া যায়নি।"}
     
-    # ধাপ ১: বাংলা TTS অডিও
+    # ধাপ ১: বাংলা TTS অডিও তৈরি
     base_audio = generate_base_audio(text)
     
     # ধাপ ২: আপনার প্রশিক্ষিত আসল কণ্ঠে রূপান্তর
@@ -100,7 +102,7 @@ def handler(event):
     else:
         final_audio = base_audio
     
-    # ধাপ ৩: Base64 এনকোড করে পাঠানো
+    # ধাপ ৩: Base64 এনকোড করে ক্লায়েন্টে পাঠানো
     with open(final_audio, "rb") as f:
         audio_base64 = base64.b64encode(f.read()).decode("utf-8")
         

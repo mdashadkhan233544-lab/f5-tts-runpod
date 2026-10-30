@@ -5,7 +5,13 @@ WORKDIR /app
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=Asia/Dhaka
 
-RUN apt-get update && apt-get install -y ffmpeg git && rm -rf /var/lib/apt/lists/*
+# fairseq এবং pyworld কম্পাইল করার জন্য বিল্ড টুলস ইনস্টল
+RUN apt-get update && apt-get install -y \
+    ffmpeg \
+    git \
+    build-essential \
+    python3-dev \
+    && rm -rf /var/lib/apt/lists/*
 
 RUN pip install --no-cache-dir \
     runpod>=1.7.0 \
@@ -13,7 +19,11 @@ RUN pip install --no-cache-dir \
     soundfile>=0.12.1 \
     gdown \
     scipy \
-    numpy
+    numpy \
+    cython
+
+# rvc-python এবং এর ডিপেনডেন্সি বিল্ড করা
+RUN pip install --no-cache-dir rvc-python
 
 COPY . .
 

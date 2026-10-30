@@ -1,89 +1,99 @@
+import os
+import sys
 import runpod
 import torch
-import io
-import os
-import base64
 import soundfile as sf
-import numpy as np
-from transformers import VitsModel, AutoTokenizer
+import base64
+import subprocess
 
+# ১. প্রয়োজনীয় লাইব্রেরি ইনস্টল নিশ্চিত করা (যদি কন্টেইনারে মিসিং থাকে)
+try:
+    import gdown
+except ImportError:
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "gdown"])
+    import gdown
+
+try:
+    from transformers import VitsModel, AutoTokenizer
+except ImportError:
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "transformers", "soundfile"])
+    from transformers import VitsModel, AutoTokenizer
+
+# ২. মডেল রাখার ডিরেক্টরি তৈরি
+MODELS_DIR = "/app/models"
+os.makedirs(MODELS_DIR, exist_ok=True)
+
+PTH_PATH = os.path.join(MODELS_DIR, "asad_male.pth")
+INDEX_PATH = os.path.join(MODELS_DIR, "asad_male.index")
+
+# ৩. গুগল ড্রাইভ থেকে মডেল ও ইনডেক্স ফাইল স্বয়ংক্রিয় ডাউনলোড
+def download_voice_models():
+    # asad_male.pth ডাউনলোড
+    if not os.path.exists(PTH_PATH) or os.path.getsize(PTH_PATH) == 0:
+        print("Downloading asad_male.pth from Google Drive...")
+        gdown.download(id="1wCNWpfYQOwetefTBqDwBvLxNLSRaHM9Z", output=PTH_PATH, quiet=False)
+
+    # asad_male.index ডাউনলোড
+    if not os.path.exists(INDEX_PATH) or os.path.getsize(INDEX_PATH) == 0:
+        print("Downloading asad_male.index from Google Drive...")
+        gdown.download(id="1Fj4fFNuYRPMzJm1AjQzH_kIGTQGf4QHR", output=INDEX_PATH, quiet=False)
+
+download_voice_models()
+
+# ৪. Meta MMS-TTS বাংলা মডেল লোড করা
 device = "cuda" if torch.cuda.is_available() else "cpu"
+print(f"Loading MMS-TTS model on {device}...")
+tts_model_name = "facebook/mms-tts-ben"
+tokenizer = AutoTokenizer.from_pretrained(tts_model_name)
+tts_model = VitsModel.from_pretrained(tts_model_name).to(device)
 
-print("Loading MMS Bengali Model...")
-mms_tokenizer = AutoTokenizer.from_pretrained("facebook/mms-tts-ben")
-mms_model = VitsModel.from_pretrained("facebook/mms-tts-ben").to(device)
-print("MMS Loaded!")
+def generate_base_audio(text: str) -> str:
+    """বাংলা টেক্সট থেকে সঠিক উচ্চারণের বেস অডিও তৈরি করে"""
+    inputs = tokenizer(text, return_tensors="pt").to(device)
+    with torch.no_grad():
+        output = tts_model(**inputs).waveform
+    
+    base_audio_path = "/tmp/base_tts.wav"
+    sf.write(base_audio_path, output.cpu().numpy().squeeze(), tts_model.config.sampling_rate)
+    return base_audio_path
 
-def apply_voice_timbre_clone(mms_audio, sr, ref_audio_bytes):
-    """
-    RVC / Timbre matching logic:
-    MMS-er audio take apnar sample audio-r pitch, tone ebong timbre onujayi transform kore.
-    """
-    try:
-        # User er reference audio read kora
-        ref_arr, ref_sr = sf.read(io.BytesIO(ref_audio_bytes))
-        if len(ref_arr.shape) > 1:
-            ref_arr = np.mean(ref_arr, axis=1) # Mono te convert
-            
-        # Ref audio theke pitch ebong formant analyze kora
-        ref_pitch = np.mean(np.abs(ref_arr))
-        mms_pitch = np.mean(np.abs(mms_audio))
-        
-        # Gain ebong frequency tone matching
-        ratio = ref_pitch / (mms_pitch + 1e-6)
-        ratio = np.clip(ratio, 0.7, 1.4)
-        
-        # Voice timbre morphing
-        cloned_audio = mms_audio * ratio
-        
-        # Spectral tilt / Voice color matching
-        fft_mms = np.fft.rfft(cloned_audio)
-        fft_ref = np.fft.rfft(ref_arr[:len(cloned_audio)] if len(ref_arr) >= len(cloned_audio) else np.pad(ref_arr, (0, len(cloned_audio) - len(ref_arr))))
-        
-        # Blend timbre (70% user voice tone, 30% clarity)
-        smooth_factor = 0.65
-        blended_spec = (1 - smooth_factor) * np.abs(fft_mms) + smooth_factor * np.abs(fft_ref[:len(fft_mms)])
-        phase = np.angle(fft_mms)
-        
-        converted_audio = np.fft.irfft(blended_spec * np.exp(1j * phase))
-        return converted_audio.astype(np.float32)
-    except Exception as e:
-        print("Cloning transform error:", str(e))
-        return mms_audio
+def convert_voice_with_rvc(input_audio_path: str) -> str:
+    """RVC ব্যবহার করে গলার স্বর Asad-এর কণ্ঠে রূপান্তর করে"""
+    output_audio_path = "/tmp/final_output.wav"
+    
+    # মেল ভয়েস হওয়ায় পিচ ০ রাখা হয়েছে
+    cmd = (
+        f"python rvc_cli.py --input {input_audio_path} --output {output_audio_path} "
+        f"--pth {PTH_PATH} --index {INDEX_PATH} --pitch 0"
+    )
+    os.system(cmd)
+    
+    # RVC আউটপুট না দিলে ফলব্যাক হিসেবে বেস অডিও ফিরিয়ে দেবে
+    if os.path.exists(output_audio_path):
+        return output_audio_path
+    return input_audio_path
 
 def handler(event):
-    try:
-        job_input = event.get("input", {})
-        gen_text = job_input.get("gen_text", "")
-        ref_audio_b64 = job_input.get("ref_audio", "")
+    input_data = event.get("input", {})
+    text = input_data.get("text", "")
+    
+    if not text:
+        return {"error": "দয়া করে টেক্সট ইনপুট দিন (e.g. 'text': 'কেমন আছেন?')"}
+    
+    # ধাপ ১: বাংলা টেক্সট থেকে স্পিচ তৈরি
+    base_audio = generate_base_audio(text)
+    
+    # ধাপ ২: প্রশিক্ষিত ভয়েস মডেলে রূপান্তর
+    final_audio = convert_voice_with_rvc(base_audio)
+    
+    # ধাপ ৩: অডিও ফাইল Base64 এনকোড করে পাঠানো
+    with open(final_audio, "rb") as f:
+        audio_base64 = base64.b64encode(f.read()).decode("utf-8")
+        
+    return {
+        "status": "success",
+        "audio_base64": audio_base64
+    }
 
-        if not gen_text:
-            return {"error": "gen_text is empty"}
-
-        # 1. MMS দিয়ে নিখুঁত বাংলা ভয়েস তৈরি
-        inputs = mms_tokenizer(gen_text, return_tensors="pt").to(device)
-        with torch.no_grad():
-            output = mms_model(**inputs).waveform
-
-        base_audio = output.squeeze().cpu().numpy()
-        sr = mms_model.config.sampling_rate
-
-        # 2. ইউজার ভয়েস স্যাম্পলে কনভার্ট (Clone)
-        final_audio = base_audio
-        if ref_audio_b64:
-            ref_bytes = base64.b64decode(ref_audio_b64)
-            final_audio = apply_voice_timbre_clone(base_audio, sr, ref_bytes)
-
-        out_buf = io.BytesIO()
-        sf.write(out_buf, final_audio, sr, format='WAV')
-        audio_base64 = base64.b64encode(out_buf.getvalue()).decode('utf-8')
-
-        return {
-            "status": "COMPLETED",
-            "audio_base64": audio_base64
-        }
-
-    except Exception as e:
-        return {"error": str(e)}
-
+# RunPod Serverless স্টার্ট
 runpod.serverless.start({"handler": handler})
